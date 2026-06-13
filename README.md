@@ -33,9 +33,10 @@ dotnet --version
 ```bash
 # 1. Clone the repository
 git clone https://github.com/MahimaRohit41/UnitConversionAPI.git
-cd unit-conversion-api
+cd UnitConversionAPI
 
 # 2. Run the API
+cd src/UnitConversionApi
 dotnet run --project src/UnitConversionApi
 
 # The API starts on http://localhost:5250.
