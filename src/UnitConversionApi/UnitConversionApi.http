@@ -1,0 +1,37 @@
+@UnitConversionApi_HostAddress = http://localhost:5250
+
+### Convert 100 Celsius to Fahrenheit
+GET {{UnitConversionApi_HostAddress}}/api/conversions/convert?value=100&from=celsius&to=fahrenheit
+Accept: application/json
+
+###
+
+### Convert 1 kilometer to miles
+GET {{UnitConversionApi_HostAddress}}/api/conversions/convert?value=1&from=kilometers&to=miles
+Accept: application/json
+
+###
+
+### Convert 10 kilograms to pounds
+GET {{UnitConversionApi_HostAddress}}/api/conversions/convert?value=10&from=kilograms&to=pounds
+Accept: application/json
+
+###
+
+### List all supported categories
+GET {{UnitConversionApi_HostAddress}}/api/conversions/categories
+Accept: application/json
+
+###
+
+### List all units in the temperature category
+GET {{UnitConversionApi_HostAddress}}/api/conversions/units?category=temperature
+Accept: application/json
+
+###
+
+### List all supported units
+GET {{UnitConversionApi_HostAddress}}/api/conversions/units
+Accept: application/json
+
+###

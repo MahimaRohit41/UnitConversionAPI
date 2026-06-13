@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Unit Conversion API — Architecture & Flow</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --card: #20232f;
+      --border: #2e3347;
+      --accent: #6c8ef5;
+      --accent2: #4ecdc4;
+      --accent3: #f7b731;
+      --accent4: #ff6b6b;
+      --text: #e2e8f0;
+      --muted: #8892a4;
+      --code-bg: #11131c;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+    }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #1a1d27 0%, #13162a 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 48px 40px 40px;
+      text-align: center;
+    }
+    header .badge {
+      display: inline-block;
+      background: rgba(108,142,245,0.15);
+      color: var(--accent);
+      border: 1px solid rgba(108,142,245,0.3);
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+    header h1 {
+      font-size: clamp(24px, 4vw, 42px);
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 12px;
+    }
+    header h1 span { color: var(--accent); }
+    header p {
+      color: var(--muted);
+      font-size: 16px;
+      max-width: 560px;
+      margin: 0 auto;
+    }
+
+    /* ── Layout ── */
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+
+    section { margin-bottom: 60px; }
+
+    h2 {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 24px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    h2 .icon {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    h3 { font-size: 15px; font-weight: 600; margin-bottom: 10px; color: var(--accent); }
+
+    p { color: var(--muted); margin-bottom: 12px; }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+    }
+
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+
+    /* ── Layer Stack ── */
+    .layer-stack { display: flex; flex-direction: column; gap: 0; }
+    .layer {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 24px;
+      position: relative;
+    }
+    .layer + .layer { margin-top: -1px; border-radius: 0; }
+    .layer:first-child { border-radius: 12px 12px 0 0; }
+    .layer:last-child { border-radius: 0 0 12px 12px; }
+    .layer-icon {
+      width: 44px; height: 44px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; flex-shrink: 0;
+    }
+    .layer-body { flex: 1; }
+    .layer-body strong { display: block; font-size: 15px; margin-bottom: 4px; }
+    .layer-body span { font-size: 13px; color: var(--muted); }
+    .layer-file {
+      font-size: 11px; color: var(--accent);
+      background: rgba(108,142,245,0.1);
+      border: 1px solid rgba(108,142,245,0.2);
+      border-radius: 6px; padding: 3px 10px;
+      font-family: monospace; white-space: nowrap;
+    }
+    .arrow {
+      text-align: center; color: var(--muted);
+      font-size: 20px; line-height: 1; margin: 4px 0;
+      z-index: 1;
+    }
+
+    /* ── Flow Steps ── */
+    .flow { display: flex; flex-direction: column; gap: 0; }
+    .flow-step {
+      display: flex; gap: 20px; position: relative;
+    }
+    .flow-step:not(:last-child)::before {
+      content: '';
+      position: absolute;
+      left: 19px; top: 44px;
+      width: 2px; bottom: -16px;
+      background: var(--border);
+    }
+    .step-num {
+      width: 40px; height: 40px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 14px; flex-shrink: 0;
+      border: 2px solid;
+      z-index: 1;
+    }
+    .step-body { padding-bottom: 32px; padding-top: 8px; }
+    .step-body strong { display: block; font-size: 15px; margin-bottom: 6px; }
+    .step-body p { font-size: 13px; margin: 0; }
+
+    /* ── Code ── */
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+      overflow-x: auto;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      margin-top: 12px;
+    }
+    .kw  { color: #c792ea; }
+    .str { color: #c3e88d; }
+    .num { color: #f78c6c; }
+    .cm  { color: #546e7a; font-style: italic; }
+    .fn  { color: #82aaff; }
+    .tp  { color: #ffcb6b; }
+
+    /* ── Table ── */
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th {
+      text-align: left; padding: 10px 16px;
+      background: rgba(108,142,245,0.08);
+      border-bottom: 1px solid var(--border);
+      color: var(--accent); font-size: 12px;
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    td { padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--muted); }
+    td:first-child { color: var(--text); font-weight: 500; }
+    tr:last-child td { border-bottom: none; }
+
+    /* ── Endpoint cards ── */
+    .endpoint {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 24px;
+      display: flex; gap: 16px; align-items: flex-start;
+      margin-bottom: 12px;
+    }
+    .method {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+      padding: 4px 10px; border-radius: 6px; flex-shrink: 0;
+      font-family: monospace; margin-top: 2px;
+    }
+    .get  { background: rgba(78,205,196,0.15); color: var(--accent2); border: 1px solid rgba(78,205,196,0.3); }
+    .endpoint-body strong { display: block; font-size: 14px; font-family: monospace; margin-bottom: 6px; }
+    .endpoint-body p { font-size: 13px; margin: 0; }
+    .params { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .param {
+      font-size: 11px; font-family: monospace;
+      background: rgba(247,183,49,0.1); color: var(--accent3);
+      border: 1px solid rgba(247,183,49,0.25);
+      border-radius: 5px; padding: 2px 8px;
+    }
+    .param.optional { background: rgba(130,130,160,0.1); color: var(--muted); border-color: var(--border); }
+
+    /* ── Reason cards ── */
+    .reason-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 22px 24px;
+    }
+    .reason-card .title {
+      font-size: 15px; font-weight: 600; margin-bottom: 8px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .reason-card p { font-size: 13px; margin: 0; }
+    .tag {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
+      padding: 2px 8px; border-radius: 4px; text-transform: uppercase;
+    }
+    .tag-green  { background: rgba(78,205,196,0.15); color: var(--accent2); }
+    .tag-blue   { background: rgba(108,142,245,0.15); color: var(--accent); }
+    .tag-yellow { background: rgba(247,183,49,0.15);  color: var(--accent3); }
+    .tag-red    { background: rgba(255,107,107,0.15); color: var(--accent4); }
+
+    /* ── Project tree ── */
+    .tree {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 13px;
+      line-height: 2;
+    }
+    .tree .dir  { color: var(--accent); }
+    .tree .file { color: var(--text); }
+    .tree .note { color: var(--muted); font-style: italic; }
+
+    /* ── Math formula ── */
+    .formula {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 24px;
+      font-family: monospace;
+      font-size: 14px;
+      text-align: center;
+      margin: 12px 0;
+      color: var(--accent2);
+      letter-spacing: 0.5px;
+    }
+
+    /* ── Category pills ── */
+    .pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .pill {
+      font-size: 12px; padding: 5px 14px;
+      border-radius: 20px; border: 1px solid var(--border);
+      color: var(--muted); background: var(--card);
+    }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      border-top: 1px solid var(--border);
+      padding: 28px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="badge">Technical Documentation</div>
+  <h1>Unit Conversion <span>API</span></h1>
+  <p>Architecture overview, application flow, design decisions, and reasoning behind every structural choice.</p>
+</header>
+
+<main>
+
+  <!-- ══════════════════════════════════════════════
+       1. ARCHITECTURE OVERVIEW
+  ══════════════════════════════════════════════ -->
+  <section>
+    <h2>
+      <span class="icon" style="background:rgba(108,142,245,0.15);">🏛</span>
+      Architecture Overview
+    </h2>
+    <p>The project follows a <strong style="color:var(--text)">Layered (N-Tier) Architecture</strong> split into clear, single-responsibility layers. HTTP concerns never mix with business logic, and business logic never touches data definitions.</p>
+
+    <div style="margin-top:24px;">
+      <div class="layer-stack">
+        <div class="layer">
+          <div class="layer-icon" style="background:rgba(255,107,107,0.1);">🌐</div>
+          <div class="layer-body">
+            <strong>HTTP / Presentation Layer</strong>
+            <span>Receives HTTP requests, validates query parameters, maps domain exceptions to HTTP status codes, returns JSON.</span>
+          </div>
+          <div class="layer-file">Controllers/ConversionsController.cs</div>
+        </div>
+        <div class="arrow">↓</div>
+        <div class="layer">
+          <div class="layer-icon" style="background:rgba(108,142,245,0.1);">⚙️</div>
+          <div class="layer-body">
+            <strong>Service / Business Logic Layer</strong>
+            <span>Orchestrates the conversion: looks up units, validates category compatibility, performs the two-step math, builds the response.</span>
+          </div>
+          <div class="layer-file">Services/ConversionService.cs</div>
+        </div>
+        <div class="arrow">↓</div>
+        <div class="layer">
+          <div class="layer-icon" style="background:rgba(78,205,196,0.1);">📦</div>
+          <div class="layer-body">
+            <strong>Data / Domain Layer</strong>
+            <span>Owns the unit definitions and conversion functions. The registry is the single source of truth for all unit metadata.</span>
+          </div>
+          <div class="layer-file">Data/UnitRegistry.cs &nbsp;·&nbsp; Data/Unit.cs</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════
+       2. PROJECT STRUCTURE
+  ══════════════════════════════════════════════ -->
+  <section>
+    <h2>
+      <span class="icon" style="background:rgba(247,183,49,0.15);">📁</span>
+      Project Structure
+    </h2>
+    <div class="tree">
+      <div><span class="dir">Unit Conversion API/</span></div>
+      <div>&nbsp;&nbsp;<span class="dir">src/UnitConversionApi/</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="dir">Controllers/</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">ConversionsController.cs</span> &nbsp;<span class="note">← HTTP layer, 3 endpoints</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="dir">Data/</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">Unit.cs</span> &nbsp;<span class="note">← Domain model (key, symbol, ToBase, FromBase)</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">UnitRegistry.cs</span> &nbsp;<span class="note">← Singleton lookup table of all units</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="dir">Exceptions/</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">ConversionException.cs</span> &nbsp;<span class="note">← Domain-level error</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="dir">Models/</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">ConversionResponse.cs</span> &nbsp;<span class="note">← API response DTO</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">UnitDto.cs</span> &nbsp;<span class="note">← Unit metadata DTO</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="dir">Services/</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">IConversionService.cs</span> &nbsp;<span class="note">← Interface (contract)</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">ConversionService.cs</span> &nbsp;<span class="note">← Implementation</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">Program.cs</span> &nbsp;<span class="note">← Composition root / DI wiring</span></div>
+      <div>&nbsp;&nbsp;<span class="dir">tests/UnitConversionApi.Tests/</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="dir">Controllers/</span> &nbsp;<span class="note">← Integration tests (WebApplicationFactory)</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="dir">Services/</span> &nbsp;<span class="note">← Unit tests (ConversionService)</span></div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════
+       3. APPLICATION FLOW
+  ══════════════════════════════════════════════ -->
+  <section>
+    <h2>
+      <span class="icon" style="background:rgba(78,205,196,0.15);">🔄</span>
+      Request Flow — Convert Endpoint
+    </h2>
+    <p style="margin-bottom:24px;">Every conversion request follows the same 6-step path from the client through to the JSON response.</p>
+
+    <div class="flow">
+      <div class="flow-step">
+        <div class="step-num" style="border-color:var(--accent4);color:var(--accent4);">1</div>
+        <div class="step-body">
+          <strong>Client sends HTTP GET</strong>
+          <p><code style="color:var(--accent2);">GET /api/conversions/convert?value=100&amp;from=celsius&amp;to=fahrenheit</code><br/>Any HTTP client — browser, curl, Postman, Invoke-RestMethod.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num" style="border-color:var(--accent3);color:var(--accent3);">2</div>
+        <div class="step-body">
+          <strong>ConversionsController.Convert()</strong>
+          <p>ASP.NET Core binds query params to method arguments. The controller checks that <code>from</code> and <code>to</code> are not empty, then delegates entirely to <code>IConversionService</code>.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num" style="border-color:var(--accent);color:var(--accent);">3</div>
+        <div class="step-body">
+          <strong>ConversionService — Unit Lookup</strong>
+          <p>Calls <code>UnitRegistry.TryGetUnit(from)</code> and <code>TryGetUnit(to)</code>. If either key is unknown, a <code>ConversionException</code> is thrown immediately.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num" style="border-color:var(--accent2);color:var(--accent2);">4</div>
+        <div class="step-body">
+          <strong>ConversionService — Category Validation</strong>
+          <p>Checks that both units share the same category string. Mixing <code>length</code> and <code>weight</code> is rejected with a descriptive error message.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num" style="border-color:#a78bfa;color:#a78bfa;">5</div>
+        <div class="step-body">
+          <strong>Two-Step Conversion Math</strong>
+          <p>The conversion goes through the category's base unit as an intermediate step:</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="formula">result = toUnit.FromBase( fromUnit.ToBase( value ) )</div>
+
+    <div style="margin-top:16px;" class="card">
+      <h3>Example: 100 °C → °F</h3>
+      <pre><span class="cm">// Step 1 — celsius.ToBase: identity (celsius IS the base)</span>
+<span class="tp">double</span> baseValue = <span class="num">100.0</span> * <span class="num">1.0</span>;  <span class="cm">// = 100.0 °C</span>
+
+<span class="cm">// Step 2 — fahrenheit.FromBase: apply the affine formula</span>
+<span class="tp">double</span> result = baseValue * (<span class="num">9.0</span> / <span class="num">5.0</span>) + <span class="num">32.0</span>;  <span class="cm">// = 212.0 °F</span></pre>
+    </div>
+
+    <div style="margin-top:24px;" class="flow">
+      <div class="flow-step">
+        <div class="step-num" style="border-color:var(--accent4);color:var(--accent4);">6</div>
+        <div class="step-body">
+          <strong>Controller returns JSON response</strong>
+          <p>On success → <code>200 OK</code> with a <code>ConversionResponse</code> object.<br/>On <code>ConversionException</code> → <code>400 Bad Request</code> with a <code>ProblemDetails</code> body.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════
+       4. API ENDPOINTS
+  ══════════════════════════════════════════════ -->
+  <section>
+    <h2>
+      <span class="icon" style="background:rgba(78,205,196,0.15);">🔌</span>
+      API Endpoints
+    </h2>
+
+    <div class="endpoint">
+      <div class="method get">GET</div>
+      <div class="endpoint-body">
+        <strong>/api/conversions/convert</strong>
+        <p>Converts a numerical value from one unit to another. Returns full metadata including unit symbols and category.</p>
+        <div class="params">
+          <span class="param">value</span>
+          <span class="param">from</span>
+          <span class="param">to</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="endpoint">
+      <div class="method get">GET</div>
+      <div class="endpoint-body">
+        <strong>/api/conversions/units</strong>
+        <p>Returns all supported units. Optionally filter by category to discover available unit keys before making a conversion.</p>
+        <div class="params">
+          <span class="param optional">category (optional)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="endpoint">
+      <div class="method get">GET</div>
+      <div class="endpoint-body">
+        <strong>/api/conversions/categories</strong>
+        <p>Returns the list of all supported category names (e.g. <code>length</code>, <code>temperature</code>, <code>weight</code>).</p>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;" class="card">
+      <h3>Supported Categories</h3>
+      <div class="pills">
+        <span class="pill">📏 length</span>
+        <span class="pill">🌡 temperature</span>
+        <span class="pill">⚖️ weight</span>
+        <span class="pill">🧪 volume</span>
+        <span class="pill">💾 digital-storage</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════
+       5. DEPENDENCY INJECTION
+  ══════════════════════════════════════════════ -->
+  <section>
+    <h2>
+      <span class="icon" style="background:rgba(255,107,107,0.15);">🔗</span>
+      Dependency Injection Wiring
+    </h2>
+    <p>All wiring happens in <code>Program.cs</code>. No class manually creates its own dependencies.</p>
+    <pre><span class="cm">// UnitRegistry built once — unit definitions are immutable</span>
+builder.Services.<span class="fn">AddSingleton</span>&lt;<span class="tp">UnitRegistry</span>&gt;();
+
+<span class="cm">// New service instance per HTTP request (safe, stateless)</span>
+builder.Services.<span class="fn">AddScoped</span>&lt;<span class="tp">IConversionService</span>, <span class="tp">ConversionService</span>&gt;();</pre>
+
+    <div style="margin-top:16px;" class="grid-2">
+      <div class="card">
+        <h3>Singleton — UnitRegistry</h3>
+        <p>Unit definitions never change at runtime. Building the dictionary once and reusing it avoids repeated allocations and is safe for concurrent reads.</p>
+      </div>
+      <div class="card">
+        <h3>Scoped — ConversionService</h3>
+        <p>Stateless per-request. Scoped lifetime is the ASP.NET convention for services that don't hold state and don't need to share state between requests.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════
+       6. WHY THIS ARCHITECTURE
+  ══════════════════════════════════════════════ -->
+  <section>
+    <h2>
+      <span class="icon" style="background:rgba(247,183,49,0.15);">💡</span>
+      Why We Chose This Architecture
+    </h2>
+
+    <div class="grid-2" style="margin-bottom:16px;">
+      <div class="reason-card">
+        <div class="title"><span class="tag tag-blue">Separation of Concerns</span></div>
+        <p>Each layer has exactly one job. The controller never does math; the service never formats JSON; the registry never knows about HTTP. This makes each file independently readable and testable.</p>
+      </div>
+      <div class="reason-card">
+        <div class="title"><span class="tag tag-green">Testability</span></div>
+        <p><code>ConversionService</code> depends on <code>UnitRegistry</code> (a concrete singleton) and exposes an <code>IConversionService</code> interface. Unit tests instantiate the service directly; integration tests use <code>WebApplicationFactory</code> — no mocking frameworks needed.</p>
+      </div>
+      <div class="reason-card">
+        <div class="title"><span class="tag tag-yellow">Scalability</span></div>
+        <p>The system currently hardcodes units. To load them from a database, you only modify <code>UnitRegistry</code> — zero changes to the service, controller, or tests. The interface boundary protects the rest of the codebase.</p>
+      </div>
+      <div class="reason-card">
+        <div class="title"><span class="tag tag-red">Extensibility</span></div>
+        <p>Adding a new unit = one <code>yield return</code> line in <code>BuildUnits()</code>. Adding a new category = same, just with a new category string. No enums to update, no switch statements to extend.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════
+       7. CONVERSION MATH DESIGN
+  ══════════════════════════════════════════════ -->
+  <section>
+    <h2>
+      <span class="icon" style="background:rgba(108,142,245,0.15);">📐</span>
+      Conversion Math Design
+    </h2>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3>Why a Base-Unit Strategy?</h3>
+        <p>If you have <strong style="color:var(--text)">N</strong> units in a category, a naive approach needs <strong style="color:var(--text)">N × (N-1)</strong> conversion functions. The base-unit strategy needs only <strong style="color:var(--text)">2 × N</strong> functions — one <code>ToBase</code> and one <code>FromBase</code> per unit.</p>
+        <div style="margin-top:12px; font-family:monospace; font-size:13px; color:var(--muted);">
+          <div>10 units naive &nbsp;= <span style="color:var(--accent4);">90 functions</span></div>
+          <div>10 units base &nbsp;&nbsp;= <span style="color:var(--accent2);">20 functions</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Linear vs Affine</h3>
+        <p><strong style="color:var(--text)">Linear</strong> units (length, weight, volume…) only need a scale factor. Stored as a <code>double</code> and wrapped by the <code>Linear()</code> helper.</p>
+        <p style="margin-top:8px;"><strong style="color:var(--text)">Affine</strong> units (temperature) need scale + offset. Stored as explicit <code>Func&lt;double, double&gt;</code> lambdas. Same interface, different implementation — the caller never needs to know.</p>
+      </div>
+    </div>
+
+    <!-- Naive vs Base-Unit deep-dive -->
+    <div style="margin-top:24px;" class="card">
+      <h3>Naive Approach — Direct Pair Conversion</h3>
+      <p style="margin-bottom:16px;">With 4 length units (meters, feet, inches, kilometers) you'd need a dedicated function for every possible pair:</p>
+      <pre><span class="cm">// 12 functions just for 4 units — N × (N-1) = 4 × 3 = 12</span>
+meters    → feet         ✓
+meters    → inches       ✓
+meters    → kilometers   ✓
+feet      → meters       ✓
+feet      → inches       ✓
+feet      → kilometers   ✓
+inches    → meters       ✓
+inches    → feet         ✓
+inches    → kilometers   ✓
+kilometers → meters      ✓
+kilometers → feet        ✓
+kilometers → inches      ✓</pre>
+      <p style="margin-top:12px;">Adding a 5th unit means writing <strong style="color:var(--accent4);">4 new functions</strong> (one to each existing unit). At 20 units you'd have <strong style="color:var(--accent4);">380 functions</strong>.</p>
+    </div>
+
+    <div style="margin-top:16px;" class="card">
+      <h3>Base-Unit Strategy — Everything Goes Through the Middleman</h3>
+      <p style="margin-bottom:16px;">Every unit only needs to know how to talk to <strong style="color:var(--text)">meters</strong> (the base). That's always <strong style="color:var(--accent2);">exactly 2 functions</strong> per unit, no matter how many other units exist:</p>
+      <pre><span class="cm">// 8 functions for 4 units — 2 × N = 2 × 4 = 8</span>
+meters     → ToBase (× <span class="num">1.0</span>)      FromBase (÷ <span class="num">1.0</span>)
+feet       → ToBase (× <span class="num">0.3048</span>)   FromBase (÷ <span class="num">0.3048</span>)
+inches     → ToBase (× <span class="num">0.0254</span>)   FromBase (÷ <span class="num">0.0254</span>)
+kilometers → ToBase (× <span class="num">1000</span>)     FromBase (÷ <span class="num">1000</span>)</pre>
+      <p style="margin-top:12px;">To convert <strong style="color:var(--text)">feet → inches</strong> there is no direct function. It routes through meters automatically:</p>
+      <div class="formula">feet → (ToBase) → meters → (FromBase) → inches<br/>1 ft &nbsp;→&nbsp; 0.3048 m &nbsp;→&nbsp; 11.97 inches</div>
+      <p>Adding a new unit always costs <strong style="color:var(--accent2);">exactly 2 functions</strong>, regardless of how many units already exist.</p>
+    </div>
+
+    <div style="margin-top:16px; overflow:auto;" class="card">
+      <h3>Growth Comparison</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Number of Units</th>
+            <th>Naive (N × N-1)</th>
+            <th>Base-Unit (2 × N)</th>
+            <th>Functions Saved</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>4</td>
+            <td style="color:var(--accent4);">12</td>
+            <td style="color:var(--accent2);">8</td>
+            <td>4</td>
+          </tr>
+          <tr>
+            <td>10</td>
+            <td style="color:var(--accent4);">90</td>
+            <td style="color:var(--accent2);">20</td>
+            <td>70</td>
+          </tr>
+          <tr>
+            <td>20</td>
+            <td style="color:var(--accent4);">380</td>
+            <td style="color:var(--accent2);">40</td>
+            <td>340</td>
+          </tr>
+          <tr>
+            <td>50</td>
+            <td style="color:var(--accent4);">2,450</td>
+            <td style="color:var(--accent2);">100</td>
+            <td>2,350</td>
+          </tr>
+          <tr>
+            <td>100</td>
+            <td style="color:var(--accent4);">9,900</td>
+            <td style="color:var(--accent2);">200</td>
+            <td>9,700</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════
+       8. ERROR HANDLING
+  ══════════════════════════════════════════════ -->
+  <section>
+    <h2>
+      <span class="icon" style="background:rgba(255,107,107,0.15);">🛡</span>
+      Error Handling Strategy
+    </h2>
+    <div style="overflow:auto;" class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Scenario</th>
+            <th>Where Detected</th>
+            <th>Exception</th>
+            <th>HTTP Response</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Unknown unit key</td>
+            <td>ConversionService</td>
+            <td><code>ConversionException</code></td>
+            <td>400 Bad Request</td>
+          </tr>
+          <tr>
+            <td>Cross-category conversion</td>
+            <td>ConversionService</td>
+            <td><code>ConversionException</code></td>
+            <td>400 Bad Request</td>
+          </tr>
+          <tr>
+            <td>Missing query parameter</td>
+            <td>Controller</td>
+            <td>—</td>
+            <td>400 Bad Request</td>
+          </tr>
+          <tr>
+            <td>Invalid number format</td>
+            <td>ASP.NET Core model binding</td>
+            <td>—</td>
+            <td>400 Bad Request</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:12px;">All error responses use the standard RFC 7807 <code>ProblemDetails</code> format, so clients get a consistent, machine-readable error body.</p>
+  </section>
+
+  <!-- ══════════════════════════════════════════════
+       9. TESTING STRATEGY
+  ══════════════════════════════════════════════ -->
+  <section>
+    <h2>
+      <span class="icon" style="background:rgba(78,205,196,0.15);">🧪</span>
+      Testing Strategy
+    </h2>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Unit Tests — ConversionServiceTests</h3>
+        <p>25 tests. Instantiate <code>ConversionService</code> directly with a real <code>UnitRegistry</code>. Verify math precision for length, temperature, weight. Cover edge cases: zero, negative, same unit, case-insensitivity, unknown units, cross-category.</p>
+      </div>
+      <div class="card">
+        <h3>Integration Tests — ConversionsControllerTests</h3>
+        <p>9 tests. Use <code>WebApplicationFactory&lt;Program&gt;</code> to spin up the real ASP.NET Core pipeline in memory. Verify HTTP status codes, JSON shape, empty results, and error responses — end-to-end with no mocking.</p>
+      </div>
+    </div>
+    <div style="margin-top:16px; padding:16px 20px; background:rgba(78,205,196,0.05); border:1px solid rgba(78,205,196,0.2); border-radius:10px; font-size:13px; color:var(--accent2);">
+      ✅ &nbsp;<strong>34 / 34 tests passing</strong> &nbsp;·&nbsp; 0 failures &nbsp;·&nbsp; 0 skipped
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  Unit Conversion API &nbsp;·&nbsp; ASP.NET Core 10 &nbsp;·&nbsp; Layered Architecture
+</footer>
+
+</body>
+</html>
